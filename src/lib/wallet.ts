@@ -2,8 +2,9 @@
 import jwt from 'jsonwebtoken';
 import credentials from '../../service-account.json';
 
-const ISSUER_ID = "YOUR_ISSUER_ID";
-const CLASS_ID = "YOUR_CLASS_ID";
+// SECUIRTY & CODE QUALITY: Pulling identifiers from environment variables
+const ISSUER_ID = process.env.ISSUER_ID!;
+const CLASS_ID = process.env.CLASS_ID!;
 
 export async function generateWalletPass(rewardTitle: string, delayMinutes: number) {
     const objectId = `${ISSUER_ID}.${crypto.randomUUID().replace(/-/g, '')}`;
