@@ -1,6 +1,15 @@
 // src/lib/retry.ts
 
 // RELIABILITY: Exponential backoff wrapper to handle dropped packets in high-density environments.
+/**
+ * Custom fetch wrapper with exponential backoff for resilience against transient errors.
+ *
+ * @param url The resource to fetch.
+ * @param options Standard RequestInit options.
+ * @param retries Maximum number of retries before giving up.
+ * @param backoff Initial backoff delay in milliseconds.
+ * @returns A Promise that resolves to the Response on success.
+ */
 export async function fetchWithRetry(
     url: string,
     options: RequestInit = {},

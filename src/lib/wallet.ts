@@ -9,6 +9,13 @@ const CLASS_ID = process.env.CLASS_ID!;
 // SECURITY: Production origin from env, falling back to localhost only for dev
 const WALLET_ORIGIN = process.env.WALLET_ORIGIN || 'http://localhost:3000';
 
+/**
+ * Generates a signed Google Wallet pass link for an incentive reward.
+ *
+ * @param rewardTitle The name of the reward.
+ * @param delayMinutes The time required to wait to claim the reward.
+ * @returns A promise that resolves to the Google Wallet save link.
+ */
 export async function generateWalletPass(rewardTitle: string, delayMinutes: number) {
     const objectId = `${ISSUER_ID}.${crypto.randomUUID().replace(/-/g, '')}`;
 

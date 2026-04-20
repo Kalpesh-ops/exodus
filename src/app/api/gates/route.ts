@@ -11,6 +11,10 @@ let mockGates: Gate[] = [
     { id: 'g-east', name: 'East Gate (Pedestrian)', capacity: 1000, currentLoad: 300 },
 ];
 
+/**
+ * Handles GET requests to retrieve live gate status.
+ * Applies jitter to simulate live traffic data and attaches incentives.
+ */
 export async function GET() {
     try {
         mockGates = mockGates.map(gate => {

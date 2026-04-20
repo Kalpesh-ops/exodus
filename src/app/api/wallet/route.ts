@@ -3,6 +3,12 @@ import { NextResponse } from 'next/server';
 import { generateWalletPass } from '@/lib/wallet';
 import { checkRateLimit, checkAndRegisterClaim } from '@/lib/rate-limit';
 
+/**
+ * Handles POST requests to generate a Google Wallet pass.
+ * Implements sliding-window rate limiting and duplicate claim prevention.
+ *
+ * @param request The incoming HTTP request.
+ */
 export async function POST(request: Request) {
     try {
         // SECURITY: Extract IP from the RIGHTMOST X-Forwarded-For entry.
@@ -40,7 +46,6 @@ export async function POST(request: Request) {
 
         // ── Step 3: Duplicate-claim prevention ──────────────────────────
         if (!checkAndRegisterClaim(ip, reward)) {
-            console.warn(`Duplicate claim attempt for IP: ${ip} on reward: ${reward}`);
             return NextResponse.json(
                 { success: false, error: `You have already claimed a ${reward} pass.` },
                 { status: 429 }

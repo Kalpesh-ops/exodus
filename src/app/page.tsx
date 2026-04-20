@@ -1,11 +1,14 @@
 // src/app/page.tsx
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { fetchWithRetry } from "@/lib/retry";
 
+/**
+ * Represents a stadium exit gate.
+ */
 type Gate = {
   id: string;
   name: string;
@@ -15,6 +18,9 @@ type Gate = {
   incentive: { delayMinutes: number; reward: string } | null;
 };
 
+/**
+ * The main application page displaying live gate status and incentives.
+ */
 export default function Home() {
   const [gates, setGates] = useState<Gate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +30,6 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
 
   const { theme, setTheme } = useTheme();
-  const prevGatesRef = useRef<Gate[]>([]);
 
   // Prevent hydration mismatch on theme toggle
   useEffect(() => setMounted(true), []);
@@ -44,10 +49,7 @@ export default function Home() {
 
         const json = await res.json();
         if (json.success) {
-          setGates(prev => {
-            prevGatesRef.current = prev;
-            return json.data;
-          });
+          setGates(json.data);
           setIsOffline(false);
         }
       } catch (error) {

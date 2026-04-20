@@ -4,6 +4,9 @@
 // SECURITY: Sliding-window rate limiter + duplicate-claim dedup
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Tracks timestamps of requests to enforce a sliding-window rate limit.
+ */
 interface RateLimitEntry {
     timestamps: number[];
     lastSeen: number;
