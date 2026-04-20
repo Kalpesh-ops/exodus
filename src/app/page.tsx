@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import Link from "next/link";
 import { fetchWithRetry } from "@/lib/retry";
 
+
 type Gate = {
   id: string;
   name: string;
@@ -22,6 +23,11 @@ export default function Home() {
   const [claimedRewards, setClaimedRewards] = useState<string[]>([]);
   const [isOffline, setIsOffline] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLog, setChatLog] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
 
   // NEW: State to control our Hackathon Judge Intercept Modal
   const [successModal, setSuccessModal] = useState<{ link: string, reward: string } | null>(null);
@@ -99,6 +105,36 @@ export default function Home() {
     }
   };
 
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMsg = chatInput;
+    setChatLog(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatInput("");
+    setIsTyping(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Pass the live gates array to give the AI real-world context
+        body: JSON.stringify({ message: userMsg, gatesContext: gates }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setChatLog(prev => [...prev, { role: 'ai', text: json.reply }]);
+      } else {
+        setChatLog(prev => [...prev, { role: 'ai', text: "Sorry, my circuits are a bit congested right now!" }]);
+      }
+    } catch (error) {
+      setChatLog(prev => [...prev, { role: 'ai', text: "Connection error. Please check the live dashboard." }]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
   return (
     <div className="min-h-screen selection:bg-blue-200 dark:selection:bg-blue-900 relative">
       <nav className="sticky top-0 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl backdrop-saturate-150 border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-300">
@@ -160,7 +196,7 @@ export default function Home() {
                   <article
                     key={gate.id}
                     className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border p-6 flex flex-col justify-between transition-all duration-500 hover:-translate-y-1 hover:shadow-xl hover:ring-2 hover:ring-blue-500/30 ${isCritical ? 'border-red-300 ring-4 ring-red-50 dark:ring-red-950/50' :
-                        isCongested ? 'border-orange-200 dark:border-orange-800/50' : 'border-slate-200 dark:border-slate-800'
+                      isCongested ? 'border-orange-200 dark:border-orange-800/50' : 'border-slate-200 dark:border-slate-800'
                       } ${isOffline ? 'opacity-80 grayscale-[30%]' : ''}`}
                     style={{ animation: `fadeInUp 0.5s ease-out ${index * 0.15}s both` }}
                     role="listitem"
@@ -183,8 +219,8 @@ export default function Home() {
                         <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden transition-colors duration-300" aria-hidden="true">
                           <div
                             className={`h-full rounded-full transition-all duration-1000 ease-in-out ${isOffline ? 'bg-slate-400 dark:bg-slate-600' :
-                                isCritical ? 'bg-red-500 animate-pulse' :
-                                  isCongested ? 'bg-orange-400' : 'bg-emerald-500'
+                              isCritical ? 'bg-red-500 animate-pulse' :
+                                isCongested ? 'bg-orange-400' : 'bg-emerald-500'
                               }`}
                             style={{ width: `${gate.congestionPercentage}%` }}
                           ></div>
@@ -208,9 +244,9 @@ export default function Home() {
                             disabled={isButtonDisabled}
                             aria-label={`Claim ${gate.incentive.reward}`}
                             className={`w-full min-h-[44px] font-bold py-3 px-4 rounded-xl transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed transform active:scale-[0.98] ${hasClaimed ? 'bg-slate-400 text-white dark:bg-slate-700 dark:text-slate-300' :
-                                isOffline ? 'bg-slate-500 text-white' :
-                                  isCritical ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 dark:hover:shadow-blue-900/50' :
-                                    'bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white'
+                              isOffline ? 'bg-slate-500 text-white' :
+                                isCritical ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 dark:hover:shadow-blue-900/50' :
+                                  'bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white'
                               }`}
                           >
                             {isOffline ? "Network Offline" :
@@ -262,6 +298,50 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          {/* SMART DYNAMIC ASSISTANT WIDGET */}
+          <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+            {chatOpen && (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-80 mb-4 overflow-hidden flex flex-col h-96 animate-in slide-in-from-bottom-5">
+                <div className="bg-blue-600 text-white p-4 font-bold text-sm flex justify-between items-center">
+                  <span>Exodus AI Assistant</span>
+                  <button onClick={() => setChatOpen(false)} aria-label="Close chat" className="hover:text-blue-200">✖</button>
+                </div>
+
+                <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 dark:bg-slate-950 text-sm">
+                  <div className="bg-slate-200 dark:bg-slate-800 p-3 rounded-lg rounded-tl-none text-slate-800 dark:text-slate-200 max-w-[85%]">
+                    Hi! I can see the live gate data. Where are you seated, or what do you need help with?
+                  </div>
+                  {chatLog.map((msg, idx) => (
+                    <div key={idx} className={`p-3 rounded-lg max-w-[85%] ${msg.role === 'user' ? 'bg-blue-600 text-white self-end ml-auto rounded-tr-none' : 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none'}`}>
+                      {msg.text}
+                    </div>
+                  ))}
+                  {isTyping && <div className="text-slate-400 text-xs animate-pulse">Exodus is thinking...</div>}
+                </div>
+
+                <form onSubmit={handleChatSubmit} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask about gates or routes..."
+                    className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button type="submit" disabled={isTyping} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 disabled:opacity-50">Send</button>
+                </form>
+              </div>
+            )}
+
+            <button
+              onClick={() => setChatOpen(!chatOpen)}
+              aria-label="Open AI Assistant"
+              className="w-14 h-14 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-700 hover:scale-105 transition-all flex items-center justify-center text-2xl"
+            >
+              🤖
+            </button>
+          </div>
+
         </aside>
       </main>
 
