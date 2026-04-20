@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",        // Next.js requires unsafe-inline for hydration scripts
+              `script-src 'self' 'unsafe-inline' ${process.env.NODE_ENV !== 'production' ? "'unsafe-eval'" : ""}`,        // Next.js requires unsafe-inline for hydration scripts
               "style-src 'self' 'unsafe-inline'",          // Tailwind injects inline styles
               "img-src 'self' https://fonts.gstatic.com data:",
               "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
