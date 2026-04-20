@@ -2,9 +2,12 @@
 import jwt from 'jsonwebtoken';
 import credentials from '../../service-account.json';
 
-// SECUIRTY & CODE QUALITY: Pulling identifiers from environment variables
+// SECURITY & CODE QUALITY: Pulling identifiers from environment variables
 const ISSUER_ID = process.env.ISSUER_ID!;
 const CLASS_ID = process.env.CLASS_ID!;
+
+// SECURITY: Production origin from env, falling back to localhost only for dev
+const WALLET_ORIGIN = process.env.WALLET_ORIGIN || 'http://localhost:3000';
 
 export async function generateWalletPass(rewardTitle: string, delayMinutes: number) {
     const objectId = `${ISSUER_ID}.${crypto.randomUUID().replace(/-/g, '')}`;
@@ -13,7 +16,7 @@ export async function generateWalletPass(rewardTitle: string, delayMinutes: numb
         iss: credentials.client_email,
         aud: 'google',
         typ: 'savetowallet',
-        origins: ['http://localhost:3000'],
+        origins: [WALLET_ORIGIN],
         payload: {
             genericObjects: [
                 {
@@ -42,7 +45,11 @@ export async function generateWalletPass(rewardTitle: string, delayMinutes: numb
         }
     };
 
-    // SECURITY: Properly signing the JWT using the RS256 algorithm and your private key
-    const token = jwt.sign(claims, credentials.private_key, { algorithm: 'RS256' });
+    // SECURITY: Properly signing the JWT using the RS256 algorithm and your private key.
+    // Token expires in 1 hour to prevent indefinite reuse of wallet links.
+    const token = jwt.sign(claims, credentials.private_key, {
+        algorithm: 'RS256',
+        expiresIn: '1h',
+    });
     return `https://pay.google.com/gp/v/save/${token}`;
 }
