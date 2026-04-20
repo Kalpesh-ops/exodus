@@ -18,9 +18,9 @@ let mockGates: Gate[] = [
 export async function GET() {
     try {
         mockGates = mockGates.map(gate => {
-            const trafficJitter = Math.floor(Math.random() * 41) - 15;
+            const trafficJitter = Math.floor(Math.random() * 21) - 10;
             let newLoad = gate.currentLoad + trafficJitter;
-            newLoad = Math.max(0, Math.min(gate.capacity + 50, newLoad));
+            newLoad = Math.max(0, Math.min(gate.capacity, newLoad));
             return { ...gate, currentLoad: newLoad };
         });
 
