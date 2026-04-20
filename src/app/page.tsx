@@ -29,6 +29,7 @@ export default function Home() {
     }
   }, []);
 
+  // FIX: Empty dependency array [] prevents the infinite re-render loop
   useEffect(() => {
     async function fetchGates() {
       try {
@@ -37,22 +38,26 @@ export default function Home() {
 
         const json = await res.json();
         if (json.success) {
-          prevGatesRef.current = gates;
-          setGates(json.data);
-          setIsOffline(false); // Reconnected successfully
+          // Safely update previous state reference without triggering a loop
+          setGates(prevGates => {
+            prevGatesRef.current = prevGates;
+            return json.data;
+          });
+          setIsOffline(false);
         }
       } catch (error) {
-        console.warn("Polling failed. Operating on stale data.", error);
-        setIsOffline(true); // Network dropped, trigger offline UI
+        console.warn("Polling failed. Operating on stale data.");
+        setIsOffline(true);
       } finally {
         setLoading(false);
       }
     }
 
     fetchGates();
+    // Strictly poll every 3 seconds
     const intervalId = setInterval(fetchGates, 3000);
     return () => clearInterval(intervalId);
-  }, [gates]);
+  }, []); // <-- THE FIX: No longer depends on [gates]
 
   const handleClaim = async (gateId: string, reward: string, delayMinutes: number) => {
     if (claimingId !== null) return;
@@ -130,7 +135,6 @@ export default function Home() {
                   } ${isOffline ? 'opacity-75 grayscale-[20%]' : ''}`} // Visual cue for stale data
                 role="listitem"
               >
-                {/* ... (Keep the rest of the card rendering exactly the same as the previous version) ... */}
                 <div>
                   <h2 className="text-xl font-bold text-gray-800">{gate.name}</h2>
                   <div className="mt-4">
@@ -143,8 +147,8 @@ export default function Home() {
                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden" aria-hidden="true">
                       <div
                         className={`h-3 rounded-full transition-all duration-1000 ease-in-out ${isOffline ? 'bg-gray-400' : // Gray out bars if offline
-                            isCritical ? 'bg-red-500 animate-pulse' :
-                              isCongested ? 'bg-orange-400' : 'bg-green-500'
+                          isCritical ? 'bg-red-500 animate-pulse' :
+                            isCongested ? 'bg-orange-400' : 'bg-green-500'
                           }`}
                         style={{ width: `${gate.congestionPercentage}%` }}
                       ></div>
@@ -166,9 +170,9 @@ export default function Home() {
                         disabled={isButtonDisabled}
                         aria-label={`Claim ${gate.incentive.reward}`}
                         className={`w-full text-white font-bold py-2.5 px-4 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${hasClaimed ? 'bg-gray-400' :
-                            isOffline ? 'bg-gray-500' :
-                              isCritical ? 'bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-300 shadow-lg shadow-red-200' :
-                                'bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300'
+                          isOffline ? 'bg-gray-500' :
+                            isCritical ? 'bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-300 shadow-lg shadow-red-200' :
+                              'bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300'
                           }`}
                       >
                         {isOffline ? "Network Offline" :
