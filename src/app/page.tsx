@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { fetchWithRetry } from "@/lib/retry"; // Import our new utility
 
 type Gate = {
   id: string;
@@ -17,10 +18,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimedRewards, setClaimedRewards] = useState<string[]>([]);
+  const [isOffline, setIsOffline] = useState(false); // NEW: Track network state
 
   const prevGatesRef = useRef<Gate[]>([]);
 
-  // Load previously claimed rewards from local browser storage on mount
   useEffect(() => {
     const savedClaims = localStorage.getItem("exodus_claims");
     if (savedClaims) {
@@ -32,13 +33,17 @@ export default function Home() {
     async function fetchGates() {
       try {
         const res = await fetch("/api/gates");
+        if (!res.ok) throw new Error("Network response was not ok");
+
         const json = await res.json();
         if (json.success) {
           prevGatesRef.current = gates;
           setGates(json.data);
+          setIsOffline(false); // Reconnected successfully
         }
       } catch (error) {
-        console.error("Failed to fetch gates", error);
+        console.warn("Polling failed. Operating on stale data.", error);
+        setIsOffline(true); // Network dropped, trigger offline UI
       } finally {
         setLoading(false);
       }
@@ -50,13 +55,12 @@ export default function Home() {
   }, [gates]);
 
   const handleClaim = async (gateId: string, reward: string, delayMinutes: number) => {
-    // Prevent double execution
     if (claimingId !== null) return;
-
     setClaimingId(gateId);
 
     try {
-      const res = await fetch("/api/wallet", {
+      // RELIABILITY: Use the robust fetch wrapper for critical transactions
+      const res = await fetchWithRetry("/api/wallet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reward, delayMinutes }),
@@ -65,23 +69,19 @@ export default function Home() {
       const json = await res.json();
 
       if (!res.ok) {
-        // Displays proper error messages (like the 429 duplicate claim error)
         alert(json.error || "An error occurred.");
         return;
       }
 
       if (json.success && json.link) {
-        // FIX: Open in new tab to prevent React unmount and "white screen" bug
         window.open(json.link, "_blank");
-
-        // Save claim locally so UI updates instantly
         const updatedClaims = [...claimedRewards, reward];
         setClaimedRewards(updatedClaims);
         localStorage.setItem("exodus_claims", JSON.stringify(updatedClaims));
       }
     } catch (error) {
       console.error("Claim error:", error);
-      alert("Network error while generating pass.");
+      alert("Network is highly unstable right now. Please try again in a moment.");
     } finally {
       setClaimingId(null);
     }
@@ -99,10 +99,17 @@ export default function Home() {
               {loading ? "Calculating optimal exit routes..." : "AI Load Balancer Active."}
             </p>
           </div>
+
+          {/* Dynamic Network Status Indicator */}
           {!loading && (
-            <div className="mt-4 md:mt-0 flex items-center px-4 py-2 bg-red-50 rounded-full border border-red-100">
-              <span className="flex w-3 h-3 me-2 bg-red-500 rounded-full animate-pulse"></span>
-              <span className="text-sm font-semibold text-red-700">LIVE DATA</span>
+            <div className={`mt-4 md:mt-0 flex items-center px-4 py-2 rounded-full border ${isOffline ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-100'
+              }`}>
+              <span className={`flex w-3 h-3 me-2 rounded-full ${isOffline ? 'bg-orange-500' : 'bg-red-500 animate-pulse'
+                }`}></span>
+              <span className={`text-sm font-semibold ${isOffline ? 'text-orange-700' : 'text-red-700'
+                }`}>
+                {isOffline ? 'CONNECTION LOST (Stale)' : 'LIVE DATA'}
+              </span>
             </div>
           )}
         </header>
@@ -111,31 +118,33 @@ export default function Home() {
           {gates.map((gate) => {
             const isCongested = gate.congestionPercentage > 70;
             const isCritical = gate.congestionPercentage > 85;
-            // Check if user has already claimed this specific reward
             const hasClaimed = gate.incentive ? claimedRewards.includes(gate.incentive.reward) : false;
-            // Lock all buttons if ANY button is currently processing
-            const isAnyProcessing = claimingId !== null;
+
+            // Disable button if offline OR if another is processing
+            const isButtonDisabled = claimingId !== null || hasClaimed || isOffline;
 
             return (
               <article
                 key={gate.id}
                 className={`bg-white rounded-xl shadow-sm border p-6 flex flex-col justify-between transition-all duration-500 ${isCongested ? 'border-red-200 shadow-red-50' : 'border-green-200'
-                  }`}
+                  } ${isOffline ? 'opacity-75 grayscale-[20%]' : ''}`} // Visual cue for stale data
                 role="listitem"
               >
+                {/* ... (Keep the rest of the card rendering exactly the same as the previous version) ... */}
                 <div>
                   <h2 className="text-xl font-bold text-gray-800">{gate.name}</h2>
                   <div className="mt-4">
                     <div className="flex justify-between text-sm mb-1 font-medium text-gray-600">
                       <span>{gate.currentLoad} / {gate.capacity}</span>
-                      <span className={`font-bold ${isCritical ? 'text-red-600' : ''}`}>
+                      <span className={`font-bold ${isCritical && !isOffline ? 'text-red-600' : ''}`}>
                         {Math.round(gate.congestionPercentage)}%
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden" aria-hidden="true">
                       <div
-                        className={`h-3 rounded-full transition-all duration-1000 ease-in-out ${isCritical ? 'bg-red-500 animate-pulse' :
-                            isCongested ? 'bg-orange-400' : 'bg-green-500'
+                        className={`h-3 rounded-full transition-all duration-1000 ease-in-out ${isOffline ? 'bg-gray-400' : // Gray out bars if offline
+                            isCritical ? 'bg-red-500 animate-pulse' :
+                              isCongested ? 'bg-orange-400' : 'bg-green-500'
                           }`}
                         style={{ width: `${gate.congestionPercentage}%` }}
                       ></div>
@@ -154,16 +163,18 @@ export default function Home() {
                       )}
                       <button
                         onClick={() => handleClaim(gate.id, gate.incentive!.reward, gate.incentive!.delayMinutes)}
-                        disabled={isAnyProcessing || hasClaimed}
+                        disabled={isButtonDisabled}
                         aria-label={`Claim ${gate.incentive.reward}`}
                         className={`w-full text-white font-bold py-2.5 px-4 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${hasClaimed ? 'bg-gray-400' :
-                            isCritical ? 'bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-300 shadow-lg shadow-red-200' :
-                              'bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300'
+                            isOffline ? 'bg-gray-500' :
+                              isCritical ? 'bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-300 shadow-lg shadow-red-200' :
+                                'bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300'
                           }`}
                       >
-                        {hasClaimed ? "✓ Already Claimed" :
-                          claimingId === gate.id ? "Generating Pass..." :
-                            `Claim ${gate.incentive.reward}`}
+                        {isOffline ? "Network Offline" :
+                          hasClaimed ? "✓ Already Claimed" :
+                            claimingId === gate.id ? "Generating Pass..." :
+                              `Claim ${gate.incentive.reward}`}
                       </button>
                     </div>
                   ) : (
