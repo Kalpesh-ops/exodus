@@ -1,9 +1,13 @@
 // src/app/api/wallet/route.ts
 import { NextResponse } from 'next/server';
 import { generateWalletPass } from '@/lib/wallet';
+import { checkAndRegisterClaim } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
     try {
+        const forwardedFor = request.headers.get('x-forwarded-for');
+        const ip = forwardedFor ? forwardedFor.split(',')[0] : '127.0.0.1';
+
         const body = await request.json();
         const { reward, delayMinutes } = body;
 
@@ -11,7 +15,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing incentive data' }, { status: 400 });
         }
 
-        // Generate the secure Google Wallet link
+        // SECURITY: Prevent duplicate claims for the same reward category
+        if (!checkAndRegisterClaim(ip, reward)) {
+            console.warn(`Duplicate claim attempt for IP: ${ip} on reward: ${reward}`);
+            return NextResponse.json(
+                { success: false, error: `You have already claimed a ${reward} pass.` },
+                { status: 429 }
+            );
+        }
+
         const walletLink = await generateWalletPass(reward, delayMinutes);
 
         return NextResponse.json({
